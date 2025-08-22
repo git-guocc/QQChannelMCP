@@ -1,0 +1,49 @@
+[project]
+name = "qq-channel-collector"
+version = "1.0.0"
+description = "QQ频道数据采集工具，支持MCP协议与AI客户端集成"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "QQ Channel Collector"},
+]
+keywords = ["qq", "channel", "mcp", "automation", "ai", "data-collection"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "selenium>=4.15.0",
+    "fastmcp>=2.0.0",
+    "aiohttp>=3.9.0",
+    "requests>=2.31.0",
+    "pydantic>=2.5.0",
+    "pandas>=2.0.0",
+    "python-dotenv>=1.0.0",
+    "loguru>=0.7.2",
+    "beautifulsoup4>=4.12.0",
+    "pillow>=10.0.0",
+    "python-dateutil>=2.8.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.black]
+line-length = 88
+target-version = ['py310']

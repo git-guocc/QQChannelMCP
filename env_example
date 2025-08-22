@@ -1,0 +1,29 @@
+# QQ频道数据采集工具配置文件
+
+# 浏览器配置
+CHROME_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"  # macOS
+# CHROME_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe"     # Windows
+# CHROME_PATH="/usr/bin/google-chrome"                                     # Linux
+
+CHROMEDRIVER_PATH="/opt/homebrew/bin/chromedriver"  # macOS (Homebrew)
+# CHROMEDRIVER_PATH="C:\tools\chromedriver.exe"     # Windows
+# CHROMEDRIVER_PATH="/usr/local/bin/chromedriver"   # Linux
+
+# 是否无头模式运行（true/false）
+HEADLESS=true
+
+# 数据存储配置
+DATA_DIR="data"
+IMAGES_DIR="data/images"
+ENABLE_IMAGE_DOWNLOAD=true
+
+# 日志配置
+LOG_LEVEL=INFO
+LOG_FILE="logs/qq_channel_collector.log"
+
+# MCP服务器配置
+MCP_PORT=8000
+MCP_HOST=localhost
+
+# 时区设置
+TIMEZONE=Asia/Shanghai
