@@ -24,6 +24,10 @@ class QQChannelPost:
     content: str = ""               # 文字内容
     images: List[str] = field(default_factory=list)      # 图片URL列表
     image_paths: List[str] = field(default_factory=list) # 本地图片路径
+    gifs: List[str] = field(default_factory=list)        # 动图URL列表
+    gif_paths: List[str] = field(default_factory=list)   # 本地动图路径
+    videos: List[str] = field(default_factory=list)      # 视频URL列表
+    video_paths: List[str] = field(default_factory=list) # 本地视频路径
     
     # 时间信息
     post_time: Optional[datetime] = None    # 发布时间
@@ -58,6 +62,12 @@ class QQChannelPost:
             'images': self.images,
             'image_paths': self.image_paths,
             'images_count': len(self.images),
+            'gifs': self.gifs,
+            'gif_paths': self.gif_paths,
+            'gifs_count': len(self.gifs),
+            'videos': self.videos,
+            'video_paths': self.video_paths,
+            'videos_count': len(self.videos),
             'post_time': self.post_time.isoformat() if self.post_time else None,
             'collected_time': self.collected_time.isoformat(),
             'like_count': self.like_count,
@@ -87,6 +97,10 @@ class QQChannelPost:
         # 处理列表字段
         data['images'] = data.get('images', [])
         data['image_paths'] = data.get('image_paths', [])
+        data['gifs'] = data.get('gifs', [])
+        data['gif_paths'] = data.get('gif_paths', [])
+        data['videos'] = data.get('videos', [])
+        data['video_paths'] = data.get('video_paths', [])
         data['tags'] = data.get('tags', [])
         data['metadata'] = data.get('metadata', {})
         
@@ -106,6 +120,18 @@ class QQChannelPost:
         """是否包含图片"""
         return len(self.images) > 0
     
+    def has_gifs(self) -> bool:
+        """是否包含动图"""
+        return len(self.gifs) > 0
+    
+    def has_videos(self) -> bool:
+        """是否包含视频"""
+        return len(self.videos) > 0
+    
+    def has_media(self) -> bool:
+        """是否包含任何媒体"""
+        return self.has_images() or self.has_gifs() or self.has_videos()
+    
     def has_content(self) -> bool:
         """是否有有效内容"""
         return bool(self.content.strip() or self.title)
@@ -121,6 +147,20 @@ class QQChannelPost:
             self.images.append(image_url)
             if local_path:
                 self.image_paths.append(local_path)
+    
+    def add_gif(self, gif_url: str, local_path: Optional[str] = None) -> None:
+        """添加动图"""
+        if gif_url and gif_url not in self.gifs:
+            self.gifs.append(gif_url)
+            if local_path:
+                self.gif_paths.append(local_path)
+    
+    def add_video(self, video_url: str, local_path: Optional[str] = None) -> None:
+        """添加视频"""
+        if video_url and video_url not in self.videos:
+            self.videos.append(video_url)
+            if local_path:
+                self.video_paths.append(local_path)
     
     def add_tag(self, tag: str) -> None:
         """添加标签"""
@@ -166,6 +206,18 @@ class PostCollection:
     def get_posts_with_images(self) -> List[QQChannelPost]:
         """获取包含图片的帖子"""
         return [post for post in self.posts if post.has_images()]
+    
+    def get_posts_with_gifs(self) -> List[QQChannelPost]:
+        """获取包含动图的帖子"""
+        return [post for post in self.posts if post.has_gifs()]
+    
+    def get_posts_with_videos(self) -> List[QQChannelPost]:
+        """获取包含视频的帖子"""
+        return [post for post in self.posts if post.has_videos()]
+    
+    def get_posts_with_media(self) -> List[QQChannelPost]:
+        """获取包含任何媒体的帖子"""
+        return [post for post in self.posts if post.has_media()]
     
     def get_posts_by_type(self, post_type: str) -> List[QQChannelPost]:
         """根据类型筛选帖子"""

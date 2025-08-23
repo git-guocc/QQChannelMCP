@@ -30,8 +30,8 @@ class QQChannelConfig:
     max_retries: int = 3
     
     # 存储配置
-    data_dir: str = "data"
-    images_dir: str = "data/images"
+    data_dir: str = "/home/guocc/GitHub/MCP/QQChannelMCP/data"
+    dayupdate_dir: str = "/home/guocc/GitHub/MCP/QQChannelMCP/data/dayupdate"
     enable_image_download: bool = True
     
     # 日志配置
@@ -42,6 +42,15 @@ class QQChannelConfig:
     mcp_port: int = 8000
     mcp_host: str = "localhost"
     
+    # AI API配置
+    gemini_api_key: Optional[str] = None
+    gemini_base_url: str = "https://generativelanguage.googleapis.com"
+    github_models_api_key: Optional[str] = None
+    github_models_base_url: str = "https://models.github.ai"
+    cherrystudio_api_key: Optional[str] = None
+    cherrystudio_base_url: str = "https://api.cherrystudio.ai"
+    ai_preferred_provider: str = "cherrystudio"
+    
     def __post_init__(self):
         """初始化后处理"""
         # 从环境变量获取配置
@@ -49,9 +58,18 @@ class QQChannelConfig:
         self.chromedriver_path = os.getenv("CHROMEDRIVER_PATH", self.chromedriver_path)
         self.headless = os.getenv("HEADLESS", "true").lower() == "true"
         
+        # AI API配置
+        self.gemini_api_key = os.getenv("GEMINI_API_KEY", self.gemini_api_key)
+        self.gemini_base_url = os.getenv("GEMINI_BASE_URL", self.gemini_base_url)
+        self.github_models_api_key = os.getenv("GITHUB_MODELS_API_KEY", self.github_models_api_key)
+        self.github_models_base_url = os.getenv("GITHUB_MODELS_BASE_URL", self.github_models_base_url)
+        self.cherrystudio_api_key = os.getenv("CHERRYSTUDIO_API_KEY", self.cherrystudio_api_key)
+        self.cherrystudio_base_url = os.getenv("CHERRYSTUDIO_BASE_URL", self.cherrystudio_base_url)
+        self.ai_preferred_provider = os.getenv("AI_PREFERRED_PROVIDER", self.ai_preferred_provider)
+        
         # 创建必要的目录
         Path(self.data_dir).mkdir(exist_ok=True)
-        Path(self.images_dir).mkdir(parents=True, exist_ok=True)
+        Path(self.dayupdate_dir).mkdir(parents=True, exist_ok=True)
         
         if self.log_file:
             Path(self.log_file).parent.mkdir(parents=True, exist_ok=True)

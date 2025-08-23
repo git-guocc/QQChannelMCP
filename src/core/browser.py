@@ -12,6 +12,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import WebDriverException, TimeoutException
+from webdriver_manager.chrome import ChromeDriverManager
 
 from .config import QQChannelConfig
 from .exceptions import ScrapingError, ConfigError, handle_exception
@@ -79,14 +80,21 @@ class BrowserManager:
         # Chrome路径配置
         if self.config.chrome_path:
             options.binary_location = self.config.chrome_path
+            logger.info(f"使用配置的Chrome路径: {self.config.chrome_path}")
         
         return options
     
     def _get_chrome_service(self) -> Optional[Service]:
         """获取Chrome服务配置"""
-        if self.config.chromedriver_path:
-            return Service(self.config.chromedriver_path)
-        return None
+        try:
+            # 优先使用webdriver-manager自动管理ChromeDriver
+            chromedriver_path = ChromeDriverManager().install()
+            return Service(chromedriver_path)
+        except Exception as e:
+            logger.warning(f"webdriver-manager失败，尝试使用配置路径: {e}")
+            if self.config.chromedriver_path:
+                return Service(self.config.chromedriver_path)
+            return None
     
     @handle_exception
     async def navigate_to(self, url: str) -> None:
