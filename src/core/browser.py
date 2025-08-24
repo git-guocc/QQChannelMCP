@@ -15,7 +15,7 @@ from selenium.common.exceptions import WebDriverException, TimeoutException
 from webdriver_manager.chrome import ChromeDriverManager
 
 from .config import QQChannelConfig
-from .exceptions import ScrapingError, ConfigError, handle_exception
+from .exceptions import ScrapingError, ConfigurationError, handle_exception
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ class BrowserManager:
             return self.driver
             
         except WebDriverException as e:
-            raise ConfigError(f"创建浏览器实例失败: {str(e)}")
+            raise ConfigurationError(f"创建浏览器实例失败: {str(e)}")
     
     def _get_chrome_options(self) -> Options:
         """获取Chrome选项配置"""

@@ -261,7 +261,8 @@ class EnhancedQQChannelScraper:
                 content=text_content[:200] + "..." if len(text_content) > 200 else text_content,
                 images=[video_poster] if video_poster else [],
                 videos=[video_src],
-                post_time=None,  # 需要进一步解析时间
+                post_time=self._parse_natural_time_to_datetime(post_time_str),  # 真实时间用于逻辑
+                post_time_str=post_time_str,  # 相对时间字符串用于展示
                 like_count=0,
                 comment_count=0
             )
@@ -332,7 +333,8 @@ class EnhancedQQChannelScraper:
                 images=images,
                 gifs=gifs,
                 videos=videos,
-                post_time=None,
+                post_time=self._parse_natural_time_to_datetime(post_time_str),  # 真实时间用于逻辑
+                post_time_str=post_time_str,  # 相对时间字符串用于展示
                 like_count=0,
                 comment_count=0
             )
@@ -632,12 +634,12 @@ class EnhancedQQChannelScraper:
                 post_id=f"css_{hash(text_content) % 100000}",
                 channel_id="5yy11f95s1",
                 channel_name="HelloKitty",
-                author_name=author_name,
                 title="CSS提取的帖子",
                 content=content.strip() or "包含媒体内容的帖子",
                 images=images,
                 videos=videos,
-                post_time=None,
+                post_time=self._parse_natural_time_to_datetime(post_time_str),  # 真实时间用于逻辑
+                post_time_str=post_time_str,  # 相对时间字符串用于展示
                 like_count=0,
                 comment_count=0
             )
@@ -659,6 +661,69 @@ class EnhancedQQChannelScraper:
             dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
             return dt
         except:
+            return None
+    
+    def _parse_natural_time_to_datetime(self, time_str):
+        """将自然语言时间转换为datetime对象"""
+        if not time_str:
+            return None
+        
+        try:
+            from datetime import datetime, timedelta
+            import re
+            
+            now = datetime.now()
+            time_str = time_str.strip()
+            
+            # 处理"X秒前"
+            seconds_match = re.search(r'(\d+)秒前', time_str)
+            if seconds_match:
+                seconds = int(seconds_match.group(1))
+                return now - timedelta(seconds=seconds)
+            
+            # 处理"X分钟前"
+            minutes_match = re.search(r'(\d+)分钟前', time_str)
+            if minutes_match:
+                minutes = int(minutes_match.group(1))
+                return now - timedelta(minutes=minutes)
+            
+            # 处理"X小时前"
+            hours_match = re.search(r'(\d+)小时前', time_str)
+            if hours_match:
+                hours = int(hours_match.group(1))
+                return now - timedelta(hours=hours)
+            
+            # 处理"X天前"
+            days_match = re.search(r'(\d+)天前', time_str)
+            if days_match:
+                days = int(days_match.group(1))
+                return now - timedelta(days=days)
+            
+            # 处理"昨天"
+            if '昨天' in time_str:
+                return now - timedelta(days=1)
+            
+            # 处理"前天"
+            if '前天' in time_str:
+                return now - timedelta(days=2)
+            
+            # 处理MM-DD格式
+            date_match = re.search(r'(\d{1,2})-(\d{1,2})', time_str)
+            if date_match:
+                month = int(date_match.group(1))
+                day = int(date_match.group(2))
+                # 假设是今年的日期
+                try:
+                    return datetime(now.year, month, day)
+                except ValueError:
+                    # 如果日期无效，返回None
+                    return None
+            
+            # 如果无法解析，返回None
+            return None
+            
+        except Exception as e:
+            logger.warning(f"自然语言时间解析失败: {time_str}, {e}")
             return None
     
     def _extract_post_id(self, url):

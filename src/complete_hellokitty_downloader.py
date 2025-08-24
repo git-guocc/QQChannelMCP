@@ -50,19 +50,64 @@ class CompleteHelloKittyDownloader:
             "start_time": time.time()
         }
     
-    def filter_24h_posts(self, posts):
-        """筛选24小时内的帖子"""
+    def filter_today_posts(self, posts):
+        """筛选今天的所有帖子 - 从今天0点到明天0点"""
         now = datetime.now()
+        today_start = datetime(now.year, now.month, now.day)
+        tomorrow_start = today_start + timedelta(days=1)
+        
         filtered_posts = []
         
         for post in posts:
-            # 使用post.post_time（datetime对象）或创建相对时间字符串
-            time_str = self._get_time_string(post)
-            if self._is_within_24h(time_str, now):
-                filtered_posts.append(post)
+            # 只使用真实时间进行逻辑处理
+            if hasattr(post, 'post_time') and post.post_time:
+                post_time = post.post_time
+                # 如果有时区信息，转换为本地时间
+                if post_time.tzinfo:
+                    post_time = post_time.replace(tzinfo=None)
                 
-        logger.info(f"筛选出24小时内的帖子: {len(filtered_posts)}/{len(filtered_posts)}")
+                # 判断是否在今天范围内
+                if today_start <= post_time < tomorrow_start:
+                    filtered_posts.append(post)
+                    logger.debug(f"帖子 '{post.title}' 通过今天筛选: {post_time} (相对时间: {getattr(post, 'post_time_str', '未知')})")
+                else:
+                    logger.debug(f"帖子 '{post.title}' 被今天筛选过滤: {post_time} (相对时间: {getattr(post, 'post_time_str', '未知')})")
+            else:
+                logger.warning(f"帖子 '{post.title}' 缺少真实时间信息，无法进行时间筛选")
+                
+        logger.info(f"筛选出今天的帖子: {len(filtered_posts)}/{len(posts)} (时间范围: {today_start} - {tomorrow_start})")
         return filtered_posts
+    
+    def filter_recent_hours_posts(self, posts, hours=24):
+        """筛选最近N小时内的帖子 - 相对时间窗口"""
+        now = datetime.now()
+        time_boundary = now - timedelta(hours=hours)
+        
+        filtered_posts = []
+        
+        for post in posts:
+            # 只使用真实时间进行逻辑处理
+            if hasattr(post, 'post_time') and post.post_time:
+                post_time = post.post_time
+                # 如果有时区信息，转换为本地时间
+                if post_time.tzinfo:
+                    post_time = post_time.replace(tzinfo=None)
+                
+                # 判断是否在时间窗口内
+                if time_boundary <= post_time <= now:
+                    filtered_posts.append(post)
+                    logger.debug(f"帖子 '{post.title}' 通过{hours}小时筛选: {post_time} (相对时间: {getattr(post, 'post_time_str', '未知')})")
+                else:
+                    logger.debug(f"帖子 '{post.title}' 被{hours}小时筛选过滤: {post_time} (相对时间: {getattr(post, 'post_time_str', '未知')})")
+            else:
+                logger.warning(f"帖子 '{post.title}' 缺少真实时间信息，无法进行时间筛选")
+                
+        logger.info(f"筛选出最近{hours}小时内的帖子: {len(filtered_posts)}/{len(filtered_posts)} (时间范围: {time_boundary} - {now})")
+        return filtered_posts
+    
+    def filter_24h_posts(self, posts):
+        """筛选帖子 - 默认使用今天的所有帖子"""
+        return self.filter_today_posts(posts)
     
     def load_existing_post_mapping(self):
         """加载已存在的帖子映射关系"""
@@ -133,32 +178,28 @@ class CompleteHelloKittyDownloader:
         return "0小时前"
     
     def _is_within_24h(self, time_str, now):
-        """判断帖子是否在24小时内"""
-        if not time_str:
-            return False
-            
+        """判断帖子是否在今天 - 使用绝对日期判断"""
         try:
-            # 处理相对时间格式
-            if "分钟前" in time_str:
-                return True
-            elif "小时前" in time_str:
-                hours = int(time_str.replace("小时前", ""))
-                return hours <= 24
-            elif "天前" in time_str:
-                days = int(time_str.replace("天前", ""))
-                return days <= 1
-            elif "昨天" in time_str:
-                return True
-            elif "-" in time_str and len(time_str) <= 6:  # MM-DD格式
-                month, day = map(int, time_str.split("-"))
-                post_date = datetime(now.year, month, day)
-                return (now - post_date).days <= 1
-            else:
-                # 其他格式暂时认为是今天的
-                return True
+            # 获取今天的0点时间
+            today_start = datetime(now.year, now.month, now.day)
+            # 获取明天的0点时间
+            tomorrow_start = today_start + timedelta(days=1)
+            
+            # 直接使用帖子的真实时间判断
+            if hasattr(self, 'current_post') and hasattr(self.current_post, 'post_time') and self.current_post.post_time:
+                post_time = self.current_post.post_time
+                # 如果有时区信息，转换为本地时间
+                if post_time.tzinfo:
+                    post_time = post_time.replace(tzinfo=None)
+                
+                # 判断是否在今天范围内：>= 今天0点 且 < 明天0点
+                return today_start <= post_time < tomorrow_start
+                
+            # 如果没有真实时间，返回False（保守处理）
+            return False
                 
         except Exception as e:
-            logger.warning(f"时间解析失败: {time_str}, {e}")
+            logger.warning(f"时间判断失败: {e}")
             return False
     
     async def download_image(self, session, image_url, filename, post_title="", max_retries=3):
@@ -361,6 +402,9 @@ class CompleteHelloKittyDownloader:
                 # 保存重复检测记录
                 self.incremental_manager.save_mapping()
                 
+                # 筛选HelloKitty图片并复制到HelloKitty文件夹
+                await self._filter_and_copy_hellokitty_images()
+                
 
     
 
@@ -389,6 +433,231 @@ class CompleteHelloKittyDownloader:
         # 显示增量管理器状态
         if hasattr(self, 'incremental_manager'):
             self.incremental_manager.print_mapping_summary()
+    
+    async def _filter_and_copy_hellokitty_images(self):
+        """筛选HelloKitty图片并复制到HelloKitty文件夹"""
+        try:
+            logger.info("开始筛选HelloKitty图片...")
+            
+            # 获取所有下载的图片
+            image_files = list(self.download_dir.glob("*_image_*.jpg"))
+            if not image_files:
+                logger.info("没有找到需要筛选的图片")
+                return
+            
+            logger.info(f"找到 {len(image_files)} 张图片需要筛选")
+            
+            # 创建HelloKitty文件夹
+            hellokitty_dir = self.download_dir.parent / "HelloKitty"
+            hellokitty_dir.mkdir(exist_ok=True)
+            
+            # 初始化AI客户端
+            ai_client = self._get_ai_client()
+            if not ai_client:
+                logger.warning("AI客户端初始化失败，跳过图片筛选")
+                return
+            
+            # 筛选HelloKitty图片
+            hellokitty_count = 0
+            for image_file in image_files:
+                try:
+                    # 使用AI分析图片
+                    is_hellokitty = await self._analyze_image_for_hellokitty(ai_client, str(image_file))
+                    
+                    if is_hellokitty:
+                        # 复制到HelloKitty文件夹
+                        dest_file = hellokitty_dir / image_file.name
+                        import shutil
+                        shutil.copy2(image_file, dest_file)
+                        hellokitty_count += 1
+                        logger.info(f"复制HelloKitty图片: {image_file.name}")
+                    else:
+                        logger.info(f"跳过非HelloKitty图片: {image_file.name}")
+                        
+                except Exception as e:
+                    logger.warning(f"筛选图片失败 {image_file.name}: {e}")
+                    # 筛选失败时保留图片
+            
+            logger.info(f"筛选完成，复制了 {hellokitty_count}/{len(image_files)} 张HelloKitty图片到 {hellokitty_dir}")
+            
+        except Exception as e:
+            logger.error(f"图片筛选和复制失败: {e}")
+    
+    def _get_ai_client(self):
+        """获取AI客户端"""
+        try:
+            from core.ai_client import AIClientManager, AIProvider
+            from core.config import QQChannelConfig
+            
+            config = QQChannelConfig()
+            
+            # 使用配置中指定的AI提供商，如果没有配置则使用OpenRouter
+            preferred_provider = getattr(config, 'ai_preferred_provider', 'openrouter')
+            
+            # 尝试使用配置的提供商
+            try:
+                if preferred_provider == 'gemini':
+                    provider_enum = AIProvider.GEMINI
+                elif preferred_provider == 'github_models':
+                    provider_enum = AIProvider.GITHUB_MODELS
+                elif preferred_provider == 'cherrystudio':
+                    provider_enum = AIProvider.CHERRYSTUDIO
+                elif preferred_provider == 'openrouter':
+                    provider_enum = AIProvider.OPENROUTER
+                else:
+                    # 默认使用OpenRouter
+                    provider_enum = AIProvider.OPENROUTER
+                
+                ai_manager = AIClientManager(config, provider_enum)
+                logger.info(f"使用AI提供商: {preferred_provider}")
+                return ai_manager
+                
+            except Exception as e:
+                logger.warning(f"配置的AI提供商 {preferred_provider} 初始化失败: {e}")
+                
+                # 尝试备用提供商
+                backup_providers = [
+                    AIProvider.OPENROUTER,
+                    AIProvider.GITHUB_MODELS,
+                    AIProvider.CHERRYSTUDIO,
+                    AIProvider.GEMINI
+                ]
+                
+                for backup_provider in backup_providers:
+                    if backup_provider != provider_enum:
+                        try:
+                            ai_manager = AIClientManager(config, backup_provider)
+                            logger.info(f"使用备用AI提供商: {backup_provider.value}")
+                            return ai_manager
+                        except Exception as backup_e:
+                            logger.warning(f"备用AI提供商 {backup_provider.value} 初始化失败: {backup_e}")
+                            continue
+                
+                logger.error("所有AI提供商都初始化失败")
+                return None
+                
+        except Exception as e:
+            logger.error(f"AI客户端初始化失败: {e}")
+            return None
+    
+    async def _analyze_image_for_hellokitty(self, ai_client, image_path: str) -> bool:
+        """分析图片是否包含HelloKitty元素"""
+        try:
+            # 构建优化的HelloKitty识别提示词
+            prompt = """
+            请分析这张图片是否包含HelloKitty元素。
+            
+            HelloKitty特征：
+            - 白色小猫形象，通常戴着蝴蝶结
+            - 可爱的卡通风格，大眼睛，无嘴巴
+            - HelloKitty品牌相关商品或图案
+            - 粉色、红色、蓝色等HelloKitty常见颜色
+            - 可能出现在服装、饰品、玩具、文具等物品上
+            
+            请只回答：是 或 否
+            """
+            
+            # 获取可用的AI客户端
+            if hasattr(ai_client, 'get_available_client'):
+                client = await ai_client.get_available_client()
+                logger.debug(f"使用AI客户端管理器，获取到客户端: {type(client).__name__}")
+            else:
+                client = ai_client
+                logger.debug(f"直接使用AI客户端: {type(client).__name__}")
+            
+            # 检查图片文件是否存在
+            if not os.path.exists(image_path):
+                logger.error(f"图片文件不存在: {image_path}")
+                return False
+            
+            # 检查图片文件大小
+            file_size = os.path.getsize(image_path)
+            if file_size == 0:
+                logger.error(f"图片文件为空: {image_path}")
+                return False
+            
+            logger.info(f"开始分析图片: {image_path} (大小: {file_size} bytes)")
+            
+            # 调用AI分析
+            result = await client.analyze_image(image_path, prompt)
+            
+            if result.success:
+                # 解析AI响应
+                content = result.content.strip().lower()
+                is_hellokitty = "是" in content or "yes" in content or "true" in content
+                
+                # 记录分析结果
+                logger.info(f"AI分析成功: {image_path}")
+                logger.info(f"  AI响应: {result.content.strip()}")
+                logger.info(f"  识别结果: {'HelloKitty' if is_hellokitty else '非HelloKitty'}")
+                logger.info(f"  置信度: {result.confidence}")
+                logger.info(f"  提供商: {result.metadata.get('provider', 'unknown')}")
+                
+                return is_hellokitty
+            else:
+                logger.warning(f"AI分析失败: {image_path}")
+                logger.warning(f"  错误信息: {result.error}")
+                logger.warning(f"  错误代码: {result.metadata.get('error_code', 'unknown')}")
+                
+                # 如果是配额限制错误，尝试使用备用策略
+                if "quota" in result.error.lower() or "rate limit" in result.error.lower():
+                    logger.info("检测到配额限制，尝试使用备用识别策略...")
+                    return await self._fallback_recognition(image_path)
+                
+                return False
+                
+        except FileNotFoundError:
+            logger.error(f"图片文件未找到: {image_path}")
+            return False
+        except PermissionError:
+            logger.error(f"没有权限访问图片文件: {image_path}")
+            return False
+        except Exception as e:
+            logger.error(f"图片分析过程中发生异常: {image_path}")
+            logger.error(f"  异常类型: {type(e).__name__}")
+            logger.error(f"  异常信息: {str(e)}")
+            import traceback
+            logger.debug(f"  异常堆栈: {traceback.format_exc()}")
+            
+            # 异常情况下也尝试备用策略
+            logger.info("尝试使用备用识别策略...")
+            return await self._fallback_recognition(image_path)
+    
+    async def _fallback_recognition(self, image_path: str) -> bool:
+        """备用识别策略 - 基于文件名和路径的启发式判断"""
+        try:
+            # 检查文件名是否包含HelloKitty相关关键词
+            filename = os.path.basename(image_path).lower()
+            path_parts = image_path.lower().split('/')
+            
+            # HelloKitty相关关键词
+            hellokitty_keywords = [
+                'hellokitty', 'hello_kitty', 'hello-kitty', 'kitty', 'hello',
+                'sanrio', 'kawaii', 'cute', 'cat', 'pink', 'bow'
+            ]
+            
+            # 检查文件名
+            for keyword in hellokitty_keywords:
+                if keyword in filename:
+                    logger.info(f"基于文件名关键词识别为HelloKitty: {filename} (关键词: {keyword})")
+                    return True
+            
+            # 检查路径
+            for part in path_parts:
+                for keyword in hellokitty_keywords:
+                    if keyword in part:
+                        logger.info(f"基于路径关键词识别为HelloKitty: {part} (关键词: {keyword})")
+                        return True
+            
+            # 如果没有明确的关键词，使用保守策略
+            # 对于HelloKitty频道，假设大部分图片都是HelloKitty相关的
+            logger.info(f"使用保守策略，假设图片为HelloKitty: {filename}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"备用识别策略失败: {e}")
+            # 备用策略失败时，使用保守策略
+            return True
 
 async def main():
     """主函数"""
