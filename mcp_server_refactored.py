@@ -34,6 +34,76 @@ app = FastMCP("QQ频道数据采集工具 - 重构版")
 # 全局工作流编排器
 orchestrator = WorkflowOrchestrator()
 
+@app.tool()
+async def download_only(
+    channel_url: str = "https://pd.qq.com/g/5yy11f95s1",
+    max_posts: int = None
+) -> Dict[str, Any]:
+    """
+    采集+下载（不识别、不复制）
+
+    Args:
+        channel_url: 频道链接
+        max_posts: 最大采集帖子数
+
+    Returns:
+        下载阶段结果（包含目录与manifest等）
+    """
+    try:
+        # 默认从 settings 读取最大帖子数
+        if max_posts is None:
+            max_posts = settings.scraping.max_posts
+        result = await orchestrator.execute_complete_workflow(
+            channel_url=channel_url,
+            max_posts=max_posts,
+            enable_recognition=False,
+            enable_copy=False
+        )
+        return result
+    except Exception as e:
+        logger.error(f"download_only 执行失败: {e}")
+        return {
+            "success": False,
+            "message": "download_only 执行失败",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+
+@app.tool()
+async def full_pipeline(
+    channel_url: str = "https://pd.qq.com/g/5yy11f95s1",
+    max_posts: int = None
+) -> Dict[str, Any]:
+    """
+    采集+下载+识别+复制（一步到位）
+
+    Args:
+        channel_url: 频道链接
+        max_posts: 最大采集帖子数
+
+    Returns:
+        完整工作流执行结果
+    """
+    try:
+        # 默认从 settings 读取最大帖子数
+        if max_posts is None:
+            max_posts = settings.scraping.max_posts
+        result = await orchestrator.execute_complete_workflow(
+            channel_url=channel_url,
+            max_posts=max_posts,
+            enable_recognition=True,
+            enable_copy=True
+        )
+        return result
+    except Exception as e:
+        logger.error(f"full_pipeline 执行失败: {e}")
+        return {
+            "success": False,
+            "message": "full_pipeline 执行失败",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+
 
 @app.tool()
 async def get_configuration_summary() -> Dict[str, Any]:
@@ -385,33 +455,30 @@ async def get_storage_info() -> Dict[str, Any]:
         json_files = glob.glob("data/qq_channel_posts_*.json")
         csv_files = glob.glob("data/qq_channel_posts_*.csv")
         
-        # 多媒体存储信息
+        # 多媒体存储信息（使用新规范：data/dayupdate/YYYY-MM-DD）
         dayupdate_dir = Path(settings.storage.base_directory) / "dayupdate"
-        
-        # 查找今天的目录
         today = datetime.now()
         date_str = today.strftime("%Y-%m-%d")
-        
-        multimedia_dir = None
-        for dir_path in dayupdate_dir.iterdir():
-            if dir_path.is_dir() and date_str in dir_path.name:
-                multimedia_dir = dir_path
-                break
-        
-        # 统计各种媒体类型
-        media_stats = {}
-        if multimedia_dir:
-            for media_type in ["images", "gifs", "videos"]:
-                media_path = multimedia_dir / media_type
+
+        day_dir = dayupdate_dir / date_str
+        media_stats = {"images": 0, "gifs": 0, "videos": 0}
+        manifest_data = None
+        if day_dir.exists():
+            for media_type in media_stats.keys():
+                media_path = day_dir / media_type
                 if media_path.exists():
                     media_stats[media_type] = len(list(media_path.glob("*")))
-                else:
-                    media_stats[media_type] = 0
-        else:
-            media_stats = {"images": 0, "gifs": 0, "videos": 0}
-        
+            # 读取 manifest.json
+            manifest_path = day_dir / "manifest.json"
+            if manifest_path.exists():
+                try:
+                    import json
+                    manifest_data = json.loads(manifest_path.read_text(encoding='utf-8'))
+                except Exception:
+                    manifest_data = None
+
         total_media = sum(media_stats.values())
-        
+
         return {
             "success": True,
             "message": "存储信息获取成功",
@@ -421,7 +488,9 @@ async def get_storage_info() -> Dict[str, Any]:
                 "media_files": media_stats,
                 "total_media_files": total_media,
                 "storage_base_directory": settings.storage.base_directory,
-                "current_date": date_str
+                "current_date": date_str,
+                "day_directory": str(day_dir),
+                "manifest": manifest_data
             },
             "timestamp": datetime.now().isoformat()
         }

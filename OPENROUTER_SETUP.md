@@ -87,7 +87,6 @@ python test_openrouter_client.py
 1. **OpenRouter** (优先) - 支持图文，成本低
 2. **GitHub Models** (备选) - 支持图文，免费
 3. **Gemini** (备选) - 支持图文，有配额限制
-4. **CherryStudio** (备选) - 仅文本
 
 ## 📝 **使用示例**
 

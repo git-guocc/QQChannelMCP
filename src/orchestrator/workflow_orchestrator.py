@@ -21,6 +21,7 @@ from core.exceptions import (
 from collector.enhanced_channel_scraper import EnhancedQQChannelScraper
 from services.hellokitty_recognition_service import HelloKittyRecognitionService
 from services.image_copy_service import ImageCopyService
+from services.media_downloader import MediaDownloader
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ class WorkflowOrchestrator:
         self.recognition_service = HelloKittyRecognitionService(
             preferred_provider=settings.ai.preferred_provider
         )
+        self.downloader = MediaDownloader(base_dayupdate_dir=str(Path(self.settings.storage.base_directory) / 'dayupdate'))
         
         # 工作流状态
         self.current_workflow = None
@@ -194,32 +196,43 @@ class WorkflowOrchestrator:
     
     async def _execute_download_phase(self, posts: List[Any]) -> DownloadResult:
         """执行图片下载阶段"""
-        logger.info("开始执行图片下载阶段...")
+        logger.info("开始执行图片下载阶段（仅图片/GIF，视频暂不下载）...")
         
         try:
-            # 这里需要调用下载器，暂时返回模拟结果
-            # TODO: 集成实际的下载器
-            total_images = sum(len(getattr(post, 'images', [])) for post in posts)
-            downloaded_images = total_images  # 假设全部下载成功
-            
+            # 使用媒体下载器下载图片/GIF
+            download_summary = await self.downloader.download_posts_media(posts)
+            total_images = download_summary.get("total_images", 0)
+            total_gifs = download_summary.get("total_gifs", 0)
+            total_videos = sum(len(getattr(post, 'videos', [])) for post in posts)
+            downloaded_files = download_summary.get("downloaded_files", 0)
+
             result = DownloadResult(
                 status=ResultBuilder.success("图片下载成功", ResultType.DOWNLOAD).status,
-                message="图片下载成功",
+                message="图片下载成功（视频暂不下载）",
                 data={
                     "total_posts": len(posts),
                     "total_images": total_images,
-                    "downloaded_images": downloaded_images,
-                    "download_directory": "data/dayupdate/images"  # 模拟路径
+                    "total_gifs": total_gifs,
+                    "total_videos_detected": total_videos,
+                    "downloaded_files": downloaded_files,
+                    "failed_files": download_summary.get("failed_files", 0),
+                    "videos_skipped": total_videos,
+                    "download_directory": download_summary.get("download_directory"),
+                    "images_dir": download_summary.get("images_dir"),
+                    "gifs_dir": download_summary.get("gifs_dir"),
                 },
-                total_files=total_images,
-                downloaded_files=downloaded_images,
-                failed_files=0,
-                total_size=0,  # 实际实现中计算文件大小
-                download_directory="data/dayupdate/images"
+                total_files=total_images + total_gifs,
+                downloaded_files=downloaded_files,
+                failed_files=download_summary.get("failed_files", 0),
+                total_size=download_summary.get("total_size", 0),
+                download_directory=download_summary.get("download_directory", "data/dayupdate")
             )
             
             result.finish()
-            logger.info(f"图片下载阶段完成: {downloaded_images}/{total_images} 张图片")
+            logger.info(
+                f"图片下载阶段完成: 已下载 {downloaded_files} 个文件（图片+GIF），"
+                f"检测到 {total_images} 张图片、{total_gifs} 个 GIF，{total_videos} 个视频（已跳过）"
+            )
             return result
             
         except Exception as e:

@@ -12,7 +12,7 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
 from core.ai_client import AIClientManager, AIProvider
-from core.config import QQChannelConfig
+from core.settings import settings
 from utils.image_processor import ImageProcessor
 
 logger = logging.getLogger(__name__)
@@ -40,7 +40,7 @@ class HelloKittyRecognitionService:
             preferred_provider: 优先使用的AI提供商
         """
         self.preferred_provider = preferred_provider
-        self.config = QQChannelConfig()
+        self.config = settings
         self.ai_manager = AIClientManager(self.config, preferred_provider)
         
         # 识别统计

@@ -7,11 +7,12 @@ import os
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Tuple
+from core.settings import settings
 
 class DirectoryManager:
     """目录管理器，统一处理新的目录命名规范"""
     
-    def __init__(self, base_dir: str = "/home/guocc/GitHub/MCP/QQChannelMCP/data/dayupdate"):
+    def __init__(self, base_dir: str = "data/dayupdate"):
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
     
@@ -28,23 +29,14 @@ class DirectoryManager:
         today = datetime.now()
         date_str = today.strftime("%Y-%m-%d")
         
-        if posts_count is None:
-            # 自动查找今天的目录
-            for dir_path in self.base_dir.iterdir():
-                if dir_path.is_dir() and date_str in dir_path.name:
-                    return dir_path
-        
-        # 创建新的目录名
-        if posts_count is None:
-            posts_count = 10  # 默认值
-        
-        dir_name = f"{posts_count}_posts_{date_str}"
-        today_dir = self.base_dir / dir_name
+        # 目录命名规范：data/dayupdate/YYYY-MM-DD/
+        today_dir = self.base_dir / date_str
         
         # 创建目录结构
         today_dir.mkdir(exist_ok=True)
         (today_dir / "images").mkdir(exist_ok=True)
-        (today_dir / "videos").mkdir(exist_ok=True)
+        if settings.app.enable_video:
+            (today_dir / "videos").mkdir(exist_ok=True)
         (today_dir / "gifs").mkdir(exist_ok=True)
         (today_dir / "unknown").mkdir(exist_ok=True)
         
@@ -93,7 +85,10 @@ class DirectoryManager:
         }
         
         # 统计各种媒体类型
-        for media_type in ["images", "videos", "gifs", "unknown"]:
+        media_types = ["images", "gifs", "unknown"]
+        if settings.app.enable_video:
+            media_types.insert(1, "videos")
+        for media_type in media_types:
             media_path = dir_path / media_type
             if media_path.exists():
                 info["media_counts"][media_type] = len(list(media_path.glob("*")))
@@ -111,18 +106,14 @@ class DirectoryManager:
                 continue
             
             try:
-                # 从目录名提取日期
-                if "_posts_" in dir_path.name:
-                    date_part = dir_path.name.split("_posts_")[-1]
-                    dir_date = datetime.strptime(date_part, "%Y-%m-%d")
-                    
-                    # 计算天数差
-                    days_old = (today - dir_date).days
-                    
-                    if days_old > keep_days:
-                        import shutil
-                        shutil.rmtree(dir_path)
-                        print(f"🗑️ 清理旧目录: {dir_path.name} (已保存 {days_old} 天)")
+                # 目录名形如 YYYY-MM-DD
+                dir_date = datetime.strptime(dir_path.name, "%Y-%m-%d")
+                # 计算天数差
+                days_old = (today - dir_date).days
+                if days_old > keep_days:
+                    import shutil
+                    shutil.rmtree(dir_path)
+                    print(f"🗑️ 清理旧目录: {dir_path.name} (已保存 {days_old} 天)")
             except Exception as e:
                 print(f"⚠️ 处理目录 {dir_path.name} 时出错: {e}")
 

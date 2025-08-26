@@ -27,3 +27,9 @@ MCP_HOST=localhost
 
 # 时区设置
 TIMEZONE=Asia/Shanghai
+
+# 功能开关
+# 是否启用视频：
+# true  - 抓取时记录视频链接，但不下载
+# false - 完全禁用视频（不记录、不统计、不创建目录）
+ENABLE_VIDEO=true

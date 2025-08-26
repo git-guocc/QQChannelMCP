@@ -26,11 +26,9 @@ class AISettings:
     gemini_api_key: str = ""
     gemini_base_url: str = "https://generativelanguage.googleapis.com"
     github_models_api_key: str = ""
-    github_models_base_url: str = "https://api.github.com/models"
+    github_models_base_url: str = "https://models.github.ai"
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    cherrystudio_api_key: str = ""
-    cherrystudio_base_url: str = "https://api.cherrystudio.com"
     
     # AI模型配置
     openrouter_model: str = "openai/gpt-4o-mini"
@@ -93,6 +91,7 @@ class AppSettings:
     enable_hellokitty_recognition: bool = True
     enable_incremental_update: bool = True
     enable_image_optimization: bool = True
+    enable_video: bool = True
     
     # 性能配置
     max_concurrent_downloads: int = 10
@@ -116,7 +115,6 @@ class Settings:
             github_models_api_key=os.getenv("GITHUB_MODELS_API_KEY", ""),
             openrouter_api_key=os.getenv("OPENROUTER_API_KEY", ""),
             openrouter_base_url=os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
-            cherrystudio_api_key=os.getenv("CHERRYSTUDIO_API_KEY", ""),
             openrouter_model=os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini"),
             max_tokens=int(os.getenv("AI_MAX_TOKENS", "2048")),
             temperature=float(os.getenv("AI_TEMPERATURE", "0.7")),
@@ -148,7 +146,8 @@ class Settings:
             environment=Environment(os.getenv("ENVIRONMENT", "development")),
             debug=os.getenv("DEBUG", "false").lower() == "true",
             max_concurrent_downloads=int(os.getenv("MAX_CONCURRENT_DOWNLOADS", "10")),
-            max_concurrent_ai_requests=int(os.getenv("MAX_CONCURRENT_AI_REQUESTS", "5"))
+            max_concurrent_ai_requests=int(os.getenv("MAX_CONCURRENT_AI_REQUESTS", "5")),
+            enable_video=os.getenv("ENABLE_VIDEO", "true").lower() == "true"
         )
     
     def _validate_settings(self):
@@ -230,7 +229,8 @@ class Settings:
             "app": {
                 "environment": self.app.environment.value,
                 "debug": self.app.debug,
-                "max_concurrent_downloads": self.app.max_concurrent_downloads
+                "max_concurrent_downloads": self.app.max_concurrent_downloads,
+                "enable_video": self.app.enable_video
             }
         }
     
