@@ -128,7 +128,7 @@ class BrowserManager:
         
         return options
     
-    def _get_chrome_service(self) -> Optional[Service]:
+    def _get_chrome_service(self) -> Service:
         """获取Chrome服务配置"""
         try:
             # 优先使用配置的ChromeDriver路径（更稳定、无需联网）
@@ -136,13 +136,16 @@ class BrowserManager:
             if cfg_path:
                 logger.info(f"使用配置的ChromeDriver: {cfg_path}")
                 return Service(cfg_path)
+            
             # 回退到 webdriver-manager 自动下载/管理
+            logger.info("未配置ChromeDriver路径，尝试使用webdriver-manager自动安装...")
             chromedriver_path = ChromeDriverManager().install()
             logger.info(f"使用webdriver-manager安装的ChromeDriver: {chromedriver_path}")
             return Service(chromedriver_path)
+            
         except Exception as e:
-            logger.warning(f"无法获取ChromeDriver服务: {e}")
-            return None
+            logger.error(f"无法获取ChromeDriver服务: {e}")
+            raise ConfigurationError(f"ChromeDriver服务初始化失败: {str(e)}")
     
     @handle_exception
     async def navigate_to(self, url: str) -> None:
@@ -168,7 +171,8 @@ class BrowserManager:
             return False
         
         try:
-            timeout = timeout or self.config.page_load_timeout
+            # 使用兼容性方法获取超时时间
+            timeout = timeout or self._page_load_timeout()
             
             # 等待页面就绪状态
             self.wait.until(

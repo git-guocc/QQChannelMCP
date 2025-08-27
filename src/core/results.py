@@ -321,28 +321,107 @@ class ResultBuilder:
         return result
 
 
-def format_result_for_mcp(result: BaseResult) -> Dict[str, Any]:
-    """格式化结果为MCP格式"""
-    mcp_result = {
-        "success": result.is_success(),
-        "message": result.message,
-        "timestamp": result.metadata.start_time.isoformat(),
-        "duration": result.metadata.duration,
-        "status": result.status.value
-    }
-    
-    if result.data:
-        mcp_result["data"] = result.data
-    
-    if result.error:
-        mcp_result["error"] = {
-            "type": result.error.__class__.__name__,
-            "code": result.error.error_code,
-            "message": result.error.message,
-            "details": result.error.details
+def format_result_for_mcp(result: Union[BaseResult, Dict[str, Any]]) -> Dict[str, Any]:
+    """格式化结果为统一的 MCP 输出结构
+
+    入参支持两类：
+    - BaseResult 及其子类：阶段性结果（采集/下载/识别/复制）
+    - dict：完整工作流结果（`WorkflowOrchestrator.execute_complete_workflow` 返回值）
+
+    统一输出字段（可能部分为空）：
+    - success: 是否成功（bool）
+    - status: 字符串状态（success/failed/partial_success 等）
+    - message: 结果信息
+    - timestamp: 开始时间（ISO8601）。工作流结果优先使用顶层 timestamp
+    - duration: 总时长（工作流取 summary.total_duration；阶段结果取 metadata.duration）
+    - data: 附加数据（工作流包含 workflow_id、summary、detailed_results）
+    - error: 错误对象（如存在）
+    - warnings: 警告列表（阶段结果如存在）
+    """
+    # 1) 处理阶段性结果对象
+    if isinstance(result, BaseResult):
+        mcp_result = {
+            "success": result.is_success(),
+            "message": result.message,
+            "timestamp": result.metadata.start_time.isoformat(),
+            "duration": result.metadata.duration,
+            "status": result.status.value,
         }
-    
-    if result.warnings:
-        mcp_result["warnings"] = result.warnings
-    
-    return mcp_result
+
+        if result.data:
+            mcp_result["data"] = result.data
+
+        if result.error:
+            mcp_result["error"] = {
+                "type": result.error.__class__.__name__,
+                "code": result.error.error_code,
+                "message": result.error.message,
+                "details": result.error.details,
+            }
+
+        if result.warnings:
+            mcp_result["warnings"] = result.warnings
+
+        return mcp_result
+
+    # 2) 处理完整工作流 dict 结果
+    if isinstance(result, dict):
+        success = bool(result.get("success", False))
+        message = result.get("message", "")
+        # timestamp: 优先使用顶层；否则从各阶段最早开始时间推断；再退化为当前时间
+        timestamp = result.get("timestamp")
+        if not timestamp:
+            detailed = result.get("detailed_results") or {}
+            start_times: List[str] = []
+            try:
+                for phase in ("scraping", "download", "recognition", "copy"):
+                    phase_obj = detailed.get(phase)
+                    if isinstance(phase_obj, dict):
+                        meta = phase_obj.get("metadata") or {}
+                        st = meta.get("start_time")
+                        if isinstance(st, str):
+                            start_times.append(st)
+                if start_times:
+                    # 采用最早的开始时间
+                    timestamp = min(start_times)
+            except Exception:
+                # 容错：保持为空，后续用当前时间
+                pass
+
+        duration = None
+        try:
+            duration = (result.get("summary") or {}).get("total_duration")
+        except Exception:
+            duration = None
+
+        mcp_result = {
+            "success": success,
+            "message": message,
+            "timestamp": timestamp or datetime.now().isoformat(),
+            "duration": duration,
+            "status": "success" if success else "failed",
+        }
+
+        data: Dict[str, Any] = {}
+        if "workflow_id" in result:
+            data["workflow_id"] = result["workflow_id"]
+        if "summary" in result:
+            data["summary"] = result["summary"]
+        if "detailed_results" in result:
+            data["detailed_results"] = result["detailed_results"]
+        if data:
+            mcp_result["data"] = data
+
+        # 透传错误
+        if isinstance(result.get("error"), dict):
+            mcp_result["error"] = result["error"]
+
+        return mcp_result
+
+    # 3) 不支持的类型，回退为失败结果
+    return {
+        "success": False,
+        "message": "不支持的结果类型，无法格式化",
+        "timestamp": datetime.now().isoformat(),
+        "status": "failed",
+    }

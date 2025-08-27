@@ -52,6 +52,9 @@ logs/
 *.tmp
 *.temp
 *.cache
+tmp_*/
+tmp_copy_test/
+tmp_dl_dayupdate/
 
 # Chrome相关
 chromedriver*

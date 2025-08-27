@@ -68,7 +68,13 @@ class WorkflowOrchestrator:
             enable_copy: 是否启用图片复制
             
         Returns:
-            完整工作流执行结果
+            完整工作流执行结果（dict）。字段说明：
+            - success: 是否成功
+            - message: 文本说明
+            - workflow_id: 工作流ID
+            - timestamp: 工作流开始时间（ISO8601）
+            - summary: 概要信息（含 total_duration 与各阶段指标）
+            - detailed_results: 各阶段的结果明细（为 BaseResult.to_dict() 输出）
         """
         workflow_id = f"workflow_{int(datetime.now().timestamp())}"
         start_time = datetime.now()
@@ -80,11 +86,10 @@ class WorkflowOrchestrator:
         logger.info(f"启用复制: {enable_copy}")
         
         try:
-            # 1. 数据采集阶段
+            # 1. 数据采集阶段（直接尝试采集，避免重复浏览器初始化）
             scraping_result = await self._execute_scraping_phase(
                 channel_url, max_posts or settings.scraping.max_posts
             )
-            
             if not scraping_result.is_success():
                 return self._create_workflow_failure_result(
                     "数据采集阶段失败", scraping_result.error
@@ -127,7 +132,8 @@ class WorkflowOrchestrator:
                 scraping_result,
                 download_result,
                 recognition_result,
-                copy_result
+                copy_result,
+                start_time
             )
             
             # 更新性能统计
@@ -151,15 +157,6 @@ class WorkflowOrchestrator:
         logger.info("开始执行数据采集阶段...")
         
         try:
-            # 测试连接
-            connection_test = await self.scraper.test_connection(channel_url)
-            if not connection_test.get("success", False):
-                return ResultBuilder.failure(
-                    "频道连接测试失败",
-                    ScrapingError("连接测试失败", channel_url, "Chrome"),
-                    ResultType.SCRAPING
-                )
-            
             # 采集帖子
             posts = await self.scraper.scrape_channel_posts(channel_url, max_posts)
             
@@ -344,9 +341,13 @@ class WorkflowOrchestrator:
         scraping_result: ScrapingResult,
         download_result: DownloadResult,
         recognition_result: Optional[RecognitionResult],
-        copy_result: Optional[CopyResult]
+        copy_result: Optional[CopyResult],
+        start_time: datetime
     ) -> Dict[str, Any]:
-        """创建工作流成功结果"""
+        """创建工作流成功结果
+
+        注：顶层 timestamp 取工作流开始时间，便于消费者统一读取。
+        """
         # 计算总执行时间
         total_duration = 0.0
         if scraping_result.metadata.duration:
@@ -365,12 +366,12 @@ class WorkflowOrchestrator:
             "total_duration": total_duration,
             "phases": {
                 "scraping": {
-                    "status": "success",
+                    "status": "success" if scraping_result.is_success() else "failed",
                     "posts_count": scraping_result.posts_count,
                     "duration": scraping_result.metadata.duration
                 },
                 "download": {
-                    "status": "success",
+                    "status": "success" if download_result.is_success() else "failed",
                     "images_count": download_result.downloaded_files,
                     "duration": download_result.metadata.duration
                 }
@@ -378,23 +379,35 @@ class WorkflowOrchestrator:
         }
         
         if recognition_result:
-            summary["phases"]["recognition"] = {
-                "status": "success",
-                "hellokitty_count": recognition_result.hellokitty_images,
+            recog_phase = {
+                "status": "success" if recognition_result.is_success() else "failed",
                 "duration": recognition_result.metadata.duration
             }
+            # 仅当有对应属性时才添加统计字段
+            if hasattr(recognition_result, "hellokitty_images"):
+                try:
+                    recog_phase["hellokitty_count"] = recognition_result.hellokitty_images
+                except Exception:
+                    pass
+            summary["phases"]["recognition"] = recog_phase
         
         if copy_result:
-            summary["phases"]["copy"] = {
-                "status": "success",
-                "copied_count": copy_result.copied_files,
+            copy_phase = {
+                "status": "success" if copy_result.is_success() else "failed",
                 "duration": copy_result.metadata.duration
             }
+            if hasattr(copy_result, "copied_files"):
+                try:
+                    copy_phase["copied_count"] = copy_result.copied_files
+                except Exception:
+                    pass
+            summary["phases"]["copy"] = copy_phase
         
         return {
             "success": True,
             "message": "完整工作流执行成功",
             "workflow_id": workflow_id,
+            "timestamp": start_time.isoformat(),
             "summary": summary,
             "detailed_results": {
                 "scraping": scraping_result.to_dict(),

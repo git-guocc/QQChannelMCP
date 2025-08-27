@@ -9,6 +9,7 @@ import re
 import logging
 from datetime import datetime
 from typing import List, Dict, Any, Optional
+from pathlib import Path
 from urllib.parse import urlparse
 
 from core.browser import BrowserManager
@@ -104,6 +105,41 @@ class EnhancedQQChannelScraper:
         except Exception as e:
             logger.error(f"帖子抓取失败: {e}")
             return []
+
+    async def test_connection(self, channel_url: str) -> Dict[str, Any]:
+        """简单连接测试：能否打开页面并检测到核心锚点/JSON 线索"""
+        try:
+            # 创建浏览器实例
+            driver = self.browser_manager.create_driver()
+            if not driver:
+                return {"success": False, "error": "无法创建浏览器实例"}
+            
+            # 导航到页面
+            driver.get(channel_url)
+
+            # 等待页面加载
+            ok = await self.browser_manager.wait_for_page_load()
+            checks: Dict[str, Any] = {"page_loaded": ok}
+
+            # 基础检查：是否存在 JSON-LD 或 DOM 锚点
+            html = driver.page_source or ""
+            checks["has_jsonld"] = ("application/ld+json" in html)
+            try:
+                anchors = driver.find_elements("css selector", ".main-feed-item")
+                checks["dom_anchors_count"] = len(anchors)
+            except Exception:
+                checks["dom_anchors_count"] = 0
+
+            success = ok and (checks["has_jsonld"] or checks["dom_anchors_count"] > 0)
+            return {"success": success, "checks": checks, "method": "browser"}
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+        finally:
+            try:
+                self.browser_manager.close_driver()
+            except Exception:
+                pass
 
     async def _extract_posts_from_network(self, url: str, max_posts: int) -> List[QQChannelPost]:
         """通过Chrome DevTools拦截网络响应，直接解析JSON（Phase 3）"""
@@ -651,8 +687,10 @@ class EnhancedQQChannelScraper:
                 node = queue.popleft()
                 if isinstance(node, dict):
                     keys = set(node.keys())
-                    if any(k in keys for k in ["headline", "title", "name", "articleBody", "content"]) and 
-                       any(k in keys for k in ["image", "images", "video", "media"]):
+                    if (
+                        any(k in keys for k in ["headline", "title", "name", "articleBody", "content"]) and
+                        any(k in keys for k in ["image", "images", "video", "media"])
+                    ):
                         try:
                             post = self._create_post_from_generic_dict(node)
                             if post:

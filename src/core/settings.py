@@ -126,7 +126,8 @@ class Settings:
             max_posts=int(os.getenv("MAX_POSTS", "50")),
             max_retries=int(os.getenv("MAX_RETRIES", "3")),
             retry_delay=float(os.getenv("RETRY_DELAY", "1.0")),
-            chrome_headless=os.getenv("CHROME_HEADLESS", "true").lower() == "true"
+            chrome_headless=os.getenv("CHROME_HEADLESS", "true").lower() == "true",
+            chrome_timeout=int(os.getenv("CHROME_TIMEOUT", "30"))
         )
         
         # 存储配置
