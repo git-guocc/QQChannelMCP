@@ -41,17 +41,21 @@ QQChannelMCP/
 │           ├── HelloKitty/      # 识别复制结果
 │           └── manifest.json    # 累计统计/边界/去重
 ├── mcp_server_refactored.py     # MCP 服务器入口
-└── requirements.txt             # 依赖
+├── pyproject.toml               # 项目配置和依赖定义
+└── requirements.txt             # 依赖列表
 ```
 
 ## 安装与启动
 
-1) 安装依赖
-```
+### 1. 安装依赖
+
+```bash
 pip install -r requirements.txt
 ```
 
-2) 环境配置（建议创建 `.env`，不要提交到仓库）
+### 2. 环境配置
+
+建议创建 `.env` 文件（不要提交到仓库）：
 ```
 # 浏览器
 CHROMEDRIVER_PATH=/usr/local/bin/chromedriver
@@ -72,9 +76,50 @@ GEMINI_API_KEY=...
 GEMINI_BASE_URL=https://generativelanguage.googleapis.com
 ```
 
-3) 启动 MCP 服务器
-```
+### 3. 启动 MCP 服务器
+
+```bash
 python mcp_server_refactored.py
+```
+
+## 使用 Docker（可选）
+
+不想重复配置环境时，推荐用 Docker 将依赖打包在镜像中：
+
+#### 构建镜像
+
+```bash
+docker build -t qqchannelmcp:latest .
+```
+
+#### 运行容器
+
+建议挂载数据/日志目录，传入 .env：
+
+```bash
+docker run --rm \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/logs:/app/logs \
+  --env-file ./.env \
+  -e CHANNEL_URL="https://pd.qq.com/g/XXXX" \
+  -e MAX_POSTS=200 \
+  qqchannelmcp:latest
+```
+
+说明：
+- 镜像内已预装 Chromium/Chromedriver 并设置 `HEADLESS=true`
+- 可通过环境变量控制：`RECOGNITION=true`、`COPY_HELLOKITTY=true`
+- 若想自定义命令，可在 `docker run` 末尾附加：
+  `python scripts/run_incremental.py --channel-url ... --max-posts ...`
+
+#### 定时调度（cron 示例）
+```
+*/15 * * * * docker run --rm \
+  -v /path/QQChannelMCP/data:/app/data \
+  -v /path/QQChannelMCP/logs:/app/logs \
+  --env-file /path/QQChannelMCP/.env \
+  -e CHANNEL_URL="https://pd.qq.com/g/XXXX" -e MAX_POSTS=200 \
+  qqchannelmcp:latest >> /path/QQChannelMCP/logs/cron.out 2>&1
 ```
 
 ## 可用 MCP 工具
@@ -93,9 +138,33 @@ python mcp_server_refactored.py
 
 说明：download_only / full_pipeline 默认在未指定 `max_posts` 时使用 `settings.scraping.max_posts`。
 
+## 定时采集（不经 MCP）
+
+若仅需定时增量采集，建议使用内置脚本入口，直接调用工作流编排器（无需启动 MCP 服务器）：
+
+```
+python scripts/run_incremental.py \
+  --channel-url "https://pd.qq.com/g/5yy11f95s1" \
+  --max-posts 200 \
+  --recognition       # 可选，默认关闭
+  --copy              # 可选，默认关闭
+```
+
+- 自动读取 `.env`（若存在）并遵循 `src/core/settings.py` 配置。
+- 默认写日志到 `logs/cron.log`，并用 `logs/cron.lock` 做文件锁避免并发。
+
+示例 cron（每 15 分钟运行一次，仅采集+下载）：
+
+```
+*/15 * * * * cd /path/to/QQChannelMCP && . .venv/bin/activate && \
+  python scripts/run_incremental.py --channel-url "https://pd.qq.com/g/XXXX" --max-posts 200 >> logs/cron.out 2>&1
+```
+
+说明：若你需要在 IDE/Agent 里交互式地调用各阶段能力，可以继续使用本仓库自带的 MCP 服务器；若只是定时任务，上述脚本更轻量。
+
 ## 关键行为说明
 
-1) 增量与早停
+### 增量与早停
 - 硬边界 hard_since：当天 00:00，仅保留今天内（或时间未知）的帖子
 - 软边界 soft_since：manifest.last_max_post_time（上一轮最大帖子时间），用于减少请求量
 - 早停判定：
@@ -103,7 +172,7 @@ python mcp_server_refactored.py
   - 连续 2 页“仅未知时间且无新帖” → 停
 - 同日目录复用 + 已存在即跳过（文件命名稳定），避免重复下载
 
-2) 文件与目录
+### 文件与目录
 - 当日目录：`data/dayupdate/YYYY-MM-DD/`
 - 命名：`{YYYYMMDD_HHMM}_{post_id}_{type}_{index:02}{ext}`
 - manifest.json：示例字段
@@ -120,11 +189,11 @@ python mcp_server_refactored.py
 }
 ```
 
-3) AI 提供商
+### AI 提供商
 - 支持：OpenRouter、GitHub Models、Gemini（CherryStudio 已移除）
 - 探活：不依赖固定文案，使用“请求成功且 JSON 可解析”为通过
 
-4) 视频策略
+### 视频策略
 - 默认仅识别链接，不下载；`ENABLE_VIDEO=false` 可完全禁用（不记录、不统计、不创建目录）
 
 ## 典型使用建议

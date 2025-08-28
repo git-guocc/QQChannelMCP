@@ -48,6 +48,7 @@ class HelloKittyRecognitionService:
             "total_processed": 0,
             "hellokitty_found": 0,
             "processing_failed": 0,
+            "ai_recognition_success": 0,
             "total_processing_time": 0.0
         }
     
@@ -101,6 +102,7 @@ class HelloKittyRecognitionService:
                 
                 # 更新统计
                 self._update_stats(recognition_result)
+                self.stats["ai_recognition_success"] += 1
                 
                 logger.info(f"图片识别成功: {image_path}")
                 logger.info(f"  HelloKitty: {'是' if is_hellokitty else '否'}")
@@ -207,16 +209,17 @@ class HelloKittyRecognitionService:
     def _build_recognition_prompt(self) -> str:
         """构建识别提示词"""
         return """
-        请分析这张图片是否包含HelloKitty元素。
+        请仔细分析这张图片是否包含HelloKitty元素。
         
-        HelloKitty特征：
+        HelloKitty特征包括但不限于：
         - 白色小猫形象，通常戴着蝴蝶结
         - 可爱的卡通风格，大眼睛，无嘴巴
         - HelloKitty品牌相关商品或图案
         - 粉色、红色、蓝色等HelloKitty常见颜色
         - 可能出现在服装、饰品、玩具、文具等物品上
+        - 各种HelloKitty变体、周边产品
         
-        请只回答：是 或 否
+        请仔细分析后回答：是 或 否
         """
     
     def _parse_ai_response(self, content: str) -> bool:
@@ -254,6 +257,7 @@ class HelloKittyRecognitionService:
         print(f"📸 总处理图片: {stats['total_processed']}")
         print(f"🎀 HelloKitty图片: {stats['hellokitty_found']}")
         print(f"❌ 处理失败: {stats['processing_failed']}")
+        print(f"🤖 AI识别成功: {stats['ai_recognition_success']}")
         print(f"⏱️  总处理时间: {stats['total_processing_time']:.2f}秒")
         
         if stats['total_processed'] > 0:
